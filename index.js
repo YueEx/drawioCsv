@@ -1,356 +1,298 @@
-Draw.loadPlugin(function(editorUi)
-{
-	var div = document.createElement('div');
-	
-	// Adds resource for action
-	mxResources.parse('hiddenTags=Hidden Tags');
+Draw.loadPlugin(function (ui) {
+  // const app = document.getElementById("app");
 
-	// Adds action
-	editorUi.actions.addAction('hiddenTags...', function()
-	{
-		if (editorUi.hiddenTagsWindow == null)
-		{
-			editorUi.hiddenTagsWindow = new HiddenTagsWindow(editorUi, document.body.offsetWidth - 380, 120, 300, 240);
-			editorUi.hiddenTagsWindow.window.addListener('show', function()
-			{
-				editorUi.fireEvent(new mxEventObject('hiddenTags'));
-			});
-			editorUi.hiddenTagsWindow.window.addListener('hide', function()
-			{
-				editorUi.fireEvent(new mxEventObject('hiddenTags'));
-			});
-			editorUi.hiddenTagsWindow.window.setVisible(true);
-			editorUi.fireEvent(new mxEventObject('hiddenTags'));
-		}
-		else
-		{
-			editorUi.hiddenTagsWindow.window.setVisible(!editorUi.hiddenTagsWindow.window.isVisible());
-		}
-	});
-	
-	var menu = editorUi.menus.get('extras');
-	var oldFunct = menu.funct;
-	
-	menu.funct = function(menu, parent)
-	{
-		oldFunct.apply(this, arguments);
-		
-		editorUi.menus.addMenuItems(menu, ['-', 'hiddenTags'], parent);
-	};
+  // the whole container part
+  const container = document.createElement("div");
+  container.style.border = "1px solid black";
+  container.style.height = "350px";
+  container.style.width = "400px";
+  container.style.padding = "5px";
+  container.style.fontSize = "14px";
+  //   container.style.backgroundColor = "lightgrey";
+  // app.appendChild(container);
 
-	var HiddenTagsWindow = function(editorUi, x, y, w, h)
-	{
-		var graph = editorUi.editor.graph;
+  const dataUploader = document.createElement("form");
+  dataUploader.style.margin = "10px 0px 10px 0px";
+  dataUploader.style.height = "5%";
+  dataUploader.id = "dataUploader";
+  dataUploader.enctype = "multipart/form-data";
+  dataUploader.innerHTML = `
+<input type="file" id="myFile" name="myFile" required/>
+<select name="csvSeperator" id="csvSeperator">
+  <option value=",">,</option>
+  <option value=";">;</option>
+</select>
 
-		var div = document.createElement('div');
-		div.style.overflow = 'hidden';
-		div.style.padding = '12px 8px 12px 8px';
-		div.style.height = 'auto';
-		
-		var searchInput = document.createElement('input');
-		searchInput.setAttribute('placeholder', 'Type in the tags and press Enter to add them');
-		searchInput.setAttribute('type', 'text');
-		searchInput.style.width = '100%';
-		searchInput.style.boxSizing = 'border-box';
-		searchInput.style.fontSize = '12px';
-		searchInput.style.borderRadius = '4px';
-		searchInput.style.padding = '4px';
-		searchInput.style.marginBottom = '8px';
-		div.appendChild(searchInput);
+<input type="number" id="startRow" name="startRow" style="width:40px" value="1" required min="1">
 
-		var filterInput = searchInput.cloneNode(true);
-		filterInput.setAttribute('placeholder', 'Filter tags');
-		div.appendChild(filterInput);
+<input type="submit" name="submit">
+`;
 
-		var tagCloud = document.createElement('div');
-		tagCloud.style.position = 'relative';
-		tagCloud.style.fontSize = '12px';
-		tagCloud.style.height = 'auto';
-		div.appendChild(tagCloud);
+  container.appendChild(dataUploader);
 
-		var graph = editorUi.editor.graph;
-		var lastValue = null;
-		
-		function getLookup(tagList)
-		{
-			var lookup = {};
-			
-			for (var i = 0; i < tagList.length; i++)
-			{
-				lookup[tagList[i].toLowerCase()] = true;
-			}
-			
-			return lookup;
-		};
-		
-		function getAllTags()
-		{
-			return graph.getTagsForCells(graph.model.getDescendants(
-				graph.model.getRoot()));
-		};
+  const csvDiv = document.createElement("div");
+  csvDiv.style.overflow = "auto";
+  csvDiv.style.width = "400px";
+  csvDiv.style.height = "300px";
 
-		/**
-		 * Returns true if tags exist and are all in lookup.
-		 */
-		function matchTags(tags, lookup, tagCount)
-		{
-			if (tags.length > 0)
-			{
-				var tmp = tags.toLowerCase().split(' ');
-				
-				if (tmp.length > tagCount)
-				{
-					return false;
-				}
-				else
-				{
-					for (var i = 0; i < tmp.length; i++)
-					{
-						if (lookup[tmp[i]] == null)
-						{
-							return false;
-						}
-					}
-					
-					return true;
-				}
-			}
-			else
-			{
-				return false;
-			}
-		};
-		
-		var hiddenTags = {};
-		var hiddenTagCount = 0;
-		var graphIsCellVisible = graph.isCellVisible;
+  container.appendChild(csvDiv);
 
-		graph.isCellVisible = function(cell)
-		{
-			return graphIsCellVisible.apply(this, arguments) &&
-				(hiddenTagCount == 0 ||
-				!matchTags(graph.getTagsForCell(cell), hiddenTags, hiddenTagCount));
-		};
-		
-		function setCellsVisibleForTag(tag, visible)
-		{
-			var cells = graph.getCellsForTags([tag], null, true);
-			
-			// Ignores layers for selection
-			var temp = [];
-			
-			for (var i = 0; i < cells.length; i++)
-			{
-				if (graph.model.isVertex(cells[i]) || graph.model.isEdge(cells[i]))
-				{
-					temp.push(cells[i]);
-				}
-			}
-			
-			graph.setCellsVisible(cells, visible);
-		};
+  var csvTitle = document.createElement("p");
+  csvTitle.innerHTML =
+    "Below shows the csv table, please choose seperator(, or ;) and starting row(number).";
+  var csvTable = document.createElement("table");
+  csvTable.name = "csvTable";
+  csvTable.style.borderCollapse = "collapse";
+  //   csvTable.style.overflow = "auto";
+  csvTable.style.width = "100%";
+  csvTable.style.height = "100%";
+  //   csvTable.style.tableLayout = "auto";
 
-		function updateSelectedTags(tags, selected, selectedColor, filter)
-		{
-			tagCloud.innerHTML = '';
-			
-			var title = document.createElement('div');
-			title.style.marginBottom = '8px';
-			mxUtils.write(title, (filter != null) ? 'Select hidden tags:' : 'Or add/remove existing tags for cell(s):');
-			tagCloud.appendChild(title);
-			
-			var found = 0;
-			
-			for (var i = 0; i < tags.length; i++)
-			{
-				if (filter == null || tags[i].substring(0, filter.length) == filter)
-				{
-					var span = document.createElement('span');
-					span.style.display = 'inline-block';
-					span.style.padding = '6px 8px';
-					span.style.borderRadius = '6px';
-					span.style.marginBottom = '8px';
-					span.style.maxWidth = '80px';
-					span.style.overflow = 'hidden';
-					span.style.textOverflow = 'ellipsis';
-					span.style.cursor = 'pointer';
-					span.setAttribute('title', tags[i]);
-					span.style.border = '1px solid #808080';
-					mxUtils.write(span, tags[i]);
-					
-					if (selected[tags[i]])
-					{
-						span.style.background = selectedColor;
-						span.style.color = '#ffffff';
-					}
-					else
-					{
-						span.style.background = (Editor.isDarkMode()) ? 'transparent' : '#ffffff';
-					}
-					
-					mxEvent.addListener(span, 'click', (function(tag)
-					{
-						return function()
-						{
-							if (!selected[tag])
-							{
-								if (!graph.isSelectionEmpty())
-								{
-									graph.addTagsForCells(graph.getSelectionCells(), [tag])
-								}
-								else
-								{
-									hiddenTags[tag] = true;
-									hiddenTagCount++;
-									refreshUi();
-									
-									window.setTimeout(function()
-									{
-										graph.refresh();
-									}, 0);
-								}
-							}
-							else
-							{
-								if (!graph.isSelectionEmpty())
-								{
-									graph.removeTagsForCells(graph.getSelectionCells(), [tag])
-								}
-								else
-								{
-									delete hiddenTags[tag];
-									hiddenTagCount--;
-									refreshUi();
-									
-									window.setTimeout(function()
-									{
-										graph.refresh();
-									}, 0);
-								}
-							}
-						};
-					})(tags[i]));
-					
-					tagCloud.appendChild(span);
-					mxUtils.write(tagCloud, ' ');
-					found++;
-				}
-			}
+  csvDiv.appendChild(csvTitle);
+  csvDiv.appendChild(csvTable);
+  var csvArray = null;
 
-			if (found == 0)
-			{
-				mxUtils.write(tagCloud, 'No tags found');
-			}
-		};
-		
-		function updateTagCloud(tags)
-		{
-			updateSelectedTags(tags, hiddenTags, '#bb0000', filterInput.value);
-		};
-		
-		function refreshUi()
-		{
-			if (graph.isSelectionEmpty())
-			{
-				updateTagCloud(getAllTags(), hiddenTags);
-				searchInput.style.display = 'none';
-				filterInput.style.display = '';
-			}
-			else
-			{
-				updateSelectedTags(getAllTags(), getLookup(graph.getCommonTagsForCells(graph.getSelectionCells())), '#2873e1');
-				searchInput.style.display = '';
-				filterInput.style.display = 'none';
-			}
-		}
-		
-		refreshUi();
+  dataUploader.addEventListener("submit", (evt) => {
+    evt.preventDefault();
+    const formData = new FormData(evt.target);
+    const file = formData.get("myFile");
+    const delimiter = formData.get("csvSeperator");
+    const startRow = formData.get("startRow");
+    const reader = new FileReader();
+    const filename = file.name;
+    reader.onload = (event) => {
+      console.log(event.target);
+      csvTitle.innerHTML = filename;
+      const resultArray = csvToArray(event.target.result, delimiter, startRow);
+      csvArray = resultArray;
+      csvTable.innerHTML = buildHtmlTable(csvArray).innerHTML;
+      delBtnListner();
+      // rowBtnListner();
+      colBtnListner();
+    };
+    reader.readAsText(file);
+  });
 
-		graph.selectionModel.addListener(mxEvent.CHANGE, function(sender, evt)
-		{
-			refreshUi();
-		});
-		
-		graph.model.addListener(mxEvent.CHANGE, function(sender, evt)
-		{
-			refreshUi();
-		});
+  const csvToArray = (str, delimiter, startRow) => {
+    const strings = str.trim().split("\n");
+    const sliceNumber = Number(startRow) - 1;
+    const headers = strings
+      .slice(sliceNumber, sliceNumber + 1)[0]
+      .split(delimiter);
 
-		mxEvent.addListener(filterInput, 'keyup', function()
-		{
-			updateTagCloud(getAllTags());
-		});
-		
-		mxEvent.addListener(searchInput, 'keyup', function(evt)
-		{
-			// Ctrl or Cmd keys
-			if (evt.keyCode == 13)
-			{
-				graph.addTagsForCells(graph.getSelectionCells(), searchInput.value.toLowerCase().split(' '));
-				searchInput.value = '';
-			}
-		});
+    const rows = strings.slice(sliceNumber + 1);
+    var table_row_id = 1;
 
-		this.window = new mxWindow(mxResources.get('hiddenTags'), div, x, y, w, null, true, true);
-		this.window.destroyOnClose = false;
-		this.window.setMaximizable(false);
-		this.window.setResizable(true);
-		this.window.setScrollable(true);
-		this.window.setClosable(true);
-		this.window.contentWrapper.style.overflowY = 'scroll';
-		
-		this.window.addListener('show', mxUtils.bind(this, function()
-		{
-			this.window.fit();
-			
-			if (this.window.isVisible())
-			{
-				searchInput.focus();
-				
-				if (mxClient.IS_GC || mxClient.IS_FF || document.documentMode >= 5)
-				{
-					searchInput.select();
-				}
-				else
-				{
-					document.execCommand('selectAll', false, null);
-				}
-			}
-			else
-			{
-				graph.container.focus();
-			}
-		}));
-		
-		this.window.setLocation = function(x, y)
-		{
-			var iw = window.innerWidth || document.body.clientWidth || document.documentElement.clientWidth;
-			var ih = window.innerHeight || document.body.clientHeight || document.documentElement.clientHeight;
-			
-			x = Math.max(0, Math.min(x, iw - this.table.clientWidth));
-			y = Math.max(0, Math.min(y, ih - this.table.clientHeight - 48));
+    const arr = rows.map((row) => {
+      const values = row.split(delimiter);
+      const el = headers.reduce((object, header, index) => {
+        object["id"] = "r" + table_row_id;
+        object[header.trim()] = values[index].trim();
 
-			if (this.getX() != x || this.getY() != y)
-			{
-				mxWindow.prototype.setLocation.apply(this, arguments);
-			}
-		};
-		
-		var resizeListener = mxUtils.bind(this, function()
-		{
-			var x = this.window.getX();
-			var y = this.window.getY();
-			
-			this.window.setLocation(x, y);
-		});
-		
-		mxEvent.addListener(window, 'resize', resizeListener);
+        return object;
+      }, {});
+      table_row_id += 1;
+      return el;
+    });
+    return arr;
+  };
 
-		this.destroy = function()
-		{
-			mxEvent.removeListener(window, 'resize', resizeListener);
-			this.window.destroy();
-		}
-	};
+  var _table_ = document.createElement("table"),
+    _tr_ = document.createElement("tr"),
+    _th_ = document.createElement("th"),
+    _td_ = document.createElement("td");
 
+  const buildHtmlTable = (arr) => {
+    var table = _table_.cloneNode(false),
+      columns = addAllColumnHeaders(arr, table);
+    for (var i = 0, maxi = arr.length; i < maxi; ++i) {
+      var tr = _tr_.cloneNode(false);
+      var buttonTd = _td_.cloneNode(false);
+      var btn = document.createElement("button");
+      btn.id = arr[i][columns[0]];
+      btn.innerText = "—";
+      btn.name = "delBtn";
+      btn.style.padding = "0px";
+      buttonTd.appendChild(btn);
+      tr.appendChild(buttonTd);
+      // row button
+      // var rBtn = document.createElement("button");
+      // rBtn.id = "out" + arr[i][columns[0]];
+      // rBtn.innerText = "▲";
+      // rBtn.name = "rowBtn";
+      // rBtn.style.padding = "0px";
+      // rBtn.style.marginLeft = "1px";
+      // buttonTd.appendChild(rBtn);
+      // buttonTd.style.display = "flex";
+      // buttonTd.style.flexDirection = "row";
+      for (var j = 0, maxj = columns.length; j < maxj; ++j) {
+        var td = _td_.cloneNode(false);
+        cellValue = arr[i][columns[j]];
+        td.appendChild(document.createTextNode(arr[i][columns[j]] || ""));
+        td.style.border = "1px solid black";
+        tr.appendChild(td);
+      }
+      tr.style.border = "1px solid black";
+
+      table.appendChild(tr);
+    }
+
+    return table;
+  };
+
+  const addAllColumnHeaders = (arr, table) => {
+    var columnSet = [],
+      tr = _tr_.cloneNode(false);
+    var emptyTh = _th_.cloneNode(false);
+    emptyTh.style.border = "1px solid black";
+    tr.appendChild(emptyTh);
+
+    for (var i = 0, l = arr.length; i < l; i++) {
+      for (var key in arr[i]) {
+        if (arr[i].hasOwnProperty(key) && columnSet.indexOf(key) === -1) {
+          columnSet.push(key);
+          var th = _th_.cloneNode(false);
+          var colGroup = document.createElement("div");
+          colGroup.style.display = "flex";
+          colGroup.style.flexDirection = "row";
+
+          var colBtn = document.createElement("button");
+          // colBtn.type = "button";
+          colBtn.innerText = "▲";
+          colBtn.name = "colBtn";
+          colBtn.id = key.trim();
+          colBtn.style.padding = "0px";
+          colBtn.style.marginRight = "1px";
+
+          colGroup.appendChild(colBtn);
+          colGroup.appendChild(document.createTextNode(key));
+          th.appendChild(colGroup);
+          th.style.border = "1px solid black";
+          //   colGroup.style.whiteSpace = "nowrap";
+
+          tr.appendChild(th);
+        }
+      }
+    }
+    tr.style.border = "1px solid black";
+    table.appendChild(tr);
+    return columnSet;
+  };
+
+  const updateTable = (evt) => {
+    csvArray = csvArray.filter((arr) => arr.id !== evt.target.id);
+    csvTable.innerHTML = buildHtmlTable(csvArray).innerHTML;
+    delBtnListner();
+    // rowBtnListner();
+    colBtnListner();
+  };
+
+  const delBtnListner = () => {
+    const btns = document.getElementsByName("delBtn");
+    for (let i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", updateTable);
+    }
+  };
+
+  // const rowBtnListner = () => {
+  //   const btns = document.getElementsByName("rowBtn");
+  //   for (let i = 0; i < btns.length; i++) {
+  //     btns[i].addEventListener("click", outPutRow);
+  //   }
+  // };
+
+  const colBtnListner = () => {
+    const btns = document.getElementsByName("colBtn");
+    for (let i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", outPutCol);
+    }
+  };
+
+  // const outPutRow = (evt) => {
+  //   selectedRow = csvArray.filter((arr) => "out" + arr.id === evt.target.id)[0];
+  //   console.log(selectedRow);
+  // };
+
+  const outPutCol = (evt) => {
+    var colCell = new mxCell(
+      evt.target.id,
+      new mxGeometry(0, 0, 90, 26),
+      "shape=partialRectangle;spacingTop=-2;spacingLeft=4;spacingRight=4"
+    );
+    var maxNameLength = evt.target.id.length;
+
+    var size = ui.editor.graph.getPreferredSizeForCell(colCell);
+    colCell.geometry.width = size.width + maxNameLength;
+    // convert value to a node
+    // var addProperty = ui.editor.graph.getModel().getValue(tableCell);
+
+    var doc = mxUtils.createXmlDocument();
+    var obj = doc.createElement("object");
+    obj.setAttribute("label", evt.target.id || "");
+    var propertyObj = obj;
+
+    // addProperty = addProperty.cloneNode(true);
+    // propertyObj.setAttribute("fds", "life");
+    propertyObj.setAttribute("MappingID", evt.target.id);
+
+    csvArray.forEach((value) => {
+      var colID = value.id;
+      var colValue = value[evt.target.id];
+
+      propertyObj.setAttribute(colID, colValue);
+    });
+
+    ui.editor.graph.getModel().setValue(colCell, propertyObj);
+
+    const cellGround = [colCell];
+    colCell.vertex = true;
+    var graph = ui.editor.graph;
+    var view = graph.view;
+    var bds = graph.getGraphBounds();
+
+    // Computes unscaled, untranslated graph bounds
+    var x = Math.ceil(
+      Math.max(0, bds.x / view.scale - view.translate.x) + 4 * graph.gridSize
+    );
+    var y = Math.ceil(
+      Math.max(0, (bds.y + bds.height) / view.scale - view.translate.y) +
+        4 * graph.gridSize
+    );
+
+    graph.importCells(cellGround, x, y);
+  };
+
+  mxUtils.br(container);
+
+  mxResources.parse("importCSV=import CSV");
+
+  var wnd = new mxWindow(
+    mxResources.get("importCSV"),
+    container,
+    document.body.offsetWidth - 480,
+    140,
+    410,
+    380,
+    true,
+    true
+  );
+  wnd.destroyOnClose = false;
+  wnd.setMaximizable(false);
+  wnd.setResizable(false);
+  wnd.setClosable(true);
+  wnd.setVisible(false);
+
+  ui.actions.addAction("importCSV", function () {
+    wnd.setVisible(!wnd.isVisible());
+  });
+
+  var menu = ui.menus.get("extras");
+  var oldFunct = menu.funct;
+
+  menu.funct = function (menu, parent) {
+    oldFunct.apply(this, arguments);
+
+    ui.menus.addMenuItems(menu, ["importCSV"], parent);
+  };
 });
+
